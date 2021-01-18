@@ -10,7 +10,7 @@
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
 void doit(int fd);
-void read_requesthdrs(rio_t *rp);
+void read_requesthdrs(rio_t *rp, char *dest, char *hostname);
 int parse_uri(char *uri, char *hostname, char *port, char *path);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
@@ -70,16 +70,19 @@ void doit(int fd)
                     "Tiny does not implement this method");
         return;
     } //line:netp:doit:endrequesterr
-    //read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
+    char* headers[MAXLINE];
+
     int end_server_fd;
     char *port[6], hostname[MAXLINE], path[MAXLINE];
     char *request[MAXLINE];
     parse_uri(buf, hostname, port, path);
     end_server_fd = Open_clientfd(hostname, port);
+    read_requesthdrs(&rio, headers, hostname);
+    printf("%s\n", headers);
 
     rio_t end_server_rio;
     Rio_readinitb(&end_server_rio, end_server_fd);
-    sprintf(request, "%s%s%s", "GET ", path, " HTTP/1.0\r\n\r\n");
+    sprintf(request, "%s%s%s%s", "GET ", path, " HTTP/1.0\r\n", headers);
     //Rio_writen(end_server_fd, "GET ", 4);
     //Rio_writen(end_server_fd, path, strlen(path));
     //Rio_writen(end_server_fd, " HTTP/1.0\r\n\r\n", strlen(" HTTP/1.0\r\n\r\n"));
@@ -101,17 +104,90 @@ void doit(int fd)
  * read_requesthdrs - read HTTP request headers
  */
 /* $begin read_requesthdrs */
-void read_requesthdrs(rio_t *rp)
+void read_requesthdrs(rio_t *rp, char *dest, char *hostname)
 {
     char buf[MAXLINE];
 
     Rio_readlineb(rp, buf, MAXLINE);
-    printf("%s", buf);
+    // printf("%s", buf);
+    int is_host = 0;
+    char *host = "Host: ";
+    int is_ua = 0;
+    char *user_agent = "User-Agent: ";
+    int is_connection = 0;
+    char *connection = "Connection: ";
+    int is_proxy_connection = 0;
+    char *proxy_connection = "Proxy-Connection: ";
+    char *headers[MAXLINE]={0};
+    char *headers_pointer=headers;
     while (strcmp(buf, "\r\n"))
     { //line:netp:readhdrs:checkterm
+        if (strstr(buf, host))
+        {
+            strncpy(headers_pointer, buf, strlen(buf));
+            headers_pointer+=strlen(buf);
+            is_host = 1;
+        }
+        else if (strstr(buf, user_agent))
+        {
+            strncpy(headers_pointer, buf, strlen(buf));
+            headers_pointer+=strlen(buf);
+            is_ua = 1;
+        }
+        else if (strstr(buf, connection))
+        {
+            // strncpy(headers, buf, strlen(buf));
+            // is_host = 1;
+        }
+        else if (strstr(buf, proxy_connection))
+        {
+            // strncpy(headers, buf, strlen(buf));
+            // is_host = 1;
+        }
+        else
+        {
+            strncpy(headers_pointer, buf, strlen(buf));
+            headers_pointer+=strlen(buf);
+        }
+        
         Rio_readlineb(rp, buf, MAXLINE);
-        printf("%s", buf);
+        // printf("%s", buf);
     }
+    if(!is_host){
+        strncpy(headers_pointer, host, strlen(host));
+        headers_pointer+=strlen(host);
+        strncpy(headers_pointer, hostname, strlen(hostname));
+        headers_pointer+=strlen(hostname);
+        strncpy(headers_pointer, "\r\n", 2);
+        headers_pointer+=2;
+    }
+        if(!is_ua){
+        strncpy(headers_pointer, user_agent, strlen(user_agent));
+        headers_pointer+=strlen(user_agent);
+        strncpy(headers_pointer, user_agent_hdr, strlen(user_agent_hdr));
+        headers_pointer+=strlen(user_agent_hdr);
+        strncpy(headers_pointer, "\r\n", 2);
+        headers_pointer+=2;
+    }
+        if(!is_connection){
+        strncpy(headers_pointer, connection, strlen(connection));
+        headers_pointer+=strlen(connection);
+        strncpy(headers_pointer, "close", 5);
+        headers_pointer+=5;
+        strncpy(headers_pointer, "\r\n", 2);
+        headers_pointer+=2;
+    }
+            if(!is_proxy_connection){
+        strncpy(headers_pointer, proxy_connection, strlen(proxy_connection));
+        headers_pointer+=strlen(proxy_connection);
+        strncpy(headers_pointer, "close", 5);
+        headers_pointer+=5;
+        strncpy(headers_pointer, "\r\n", 2);
+        headers_pointer+=2;
+    }
+    strncpy(headers_pointer, "\r\n", 2);
+    headers_pointer+=2;
+    strncpy(dest, headers, strlen(headers));
     return;
 }
 /* $end read_requesthdrs */
