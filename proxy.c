@@ -11,7 +11,7 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
-int parse_uri(char *uri, char *hostname, int *port, char *path);
+int parse_uri(char *uri, char *hostname, char *port, char *path);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
@@ -24,12 +24,6 @@ int main(int argc, char **argv)
     char hostname[MAXLINE], port[MAXLINE], path[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
-    int test_port;
-    printf("asd");
-    parse_uri("GET http://www.cmu.edu/hub/index.html HTTP/1.1", hostname, &test_port, path);
-
-    printf("%s\n", hostname);
-    printf("%s\n", path);
 
     /* Check command line args */
     if (argc != 2)
@@ -78,8 +72,28 @@ void doit(int fd)
     } //line:netp:doit:endrequesterr
     //read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
     int end_server_fd;
+    char *port[6], hostname[MAXLINE], path[MAXLINE];
+    char *request[MAXLINE];
+    parse_uri(buf, hostname, port, path);
+    end_server_fd = Open_clientfd(hostname, port);
 
-    // end_server_fd=Open_clientfd(hostname, port);
+    rio_t end_server_rio;
+    Rio_readinitb(&end_server_rio, end_server_fd);
+    sprintf(request, "%s%s%s", "GET ", path, " HTTP/1.0\r\n\r\n");
+    //Rio_writen(end_server_fd, "GET ", 4);
+    //Rio_writen(end_server_fd, path, strlen(path));
+    //Rio_writen(end_server_fd, " HTTP/1.0\r\n\r\n", strlen(" HTTP/1.0\r\n\r\n"));
+    Rio_writen(end_server_fd, request, strlen(request));
+    size_t n;
+
+    while ((n = Rio_readlineb(&end_server_rio, buf, MAXLINE)) != 0)
+    {
+        Rio_writen(fd, buf, n);
+    }
+    // Rio_readlineb(&end_server_rio, buf, MAXLINE);
+    // rio_readn(&end_server_rio, buf, MAXLINE);
+    // printf("%s\n", buf);
+    Close(end_server_fd);
 }
 /* $end doit */
 
@@ -107,14 +121,21 @@ void read_requesthdrs(rio_t *rp)
  *             return 0 if dynamic content, 1 if static
  */
 /* $begin parse_uri */
-int parse_uri(char *uri, char *hostname, int *port, char *path)
+int parse_uri(char *uri, char *hostname, char *port, char *path)
 {
-    *port = 80;
+    *port = "80";
     char *http_pos = strstr(uri, "//");
+    char *port_pos = strstr(http_pos + 2, ":");
     char *path_pos = strstr(http_pos + 2, "/");
+    printf("%s", path_pos);
     char *end_pos = strstr(path_pos + 1, " ");
-    strncpy(hostname, http_pos+2, (int)(strlen(http_pos + 2) - strlen(path_pos)));
+    printf("%s", end_pos);
+    strncpy(hostname, http_pos + 2, (int)(strlen(http_pos + 2) - strlen(port_pos)));
+    hostname[(int)(strlen(http_pos + 2) - strlen(port_pos))] = '\0';
     strncpy(path, path_pos, (int)(strlen(path_pos) - strlen(end_pos)));
+    path[(int)(strlen(path_pos) - strlen(end_pos))] = '\0';
+    strncpy(port, port_pos + 1, (int)(strlen(port_pos + 1) - strlen(path_pos)));
+    port[(int)(strlen(port_pos + 1) - strlen(path_pos))] = '\0';
     return 1;
 }
 /* $end parse_uri */
